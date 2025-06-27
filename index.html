@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Gen-UI LLM Chat (Self-Modifying UI)</title>
+  <title>Gen-UI: Self-Modifying Chat (OpenAI)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style id="base-style">
     :root {
@@ -91,7 +91,6 @@
       margin: 0.6em 0 0 0;
     }
   </style>
-  <!-- Additional dynamic LLM CSS will go here -->
   <style id="llm-css"></style>
 </head>
 <body>
@@ -124,7 +123,6 @@ If the user asks for JS or HTML, provide it in appropriate code blocks (js/html)
 function addMessage(content, who) {
   const div = document.createElement('div');
   div.className = 'bubble ' + (who === 'me' ? 'mine' : 'llm');
-  // Basic markdown code block rendering (CSS/JS/HTML)
   div.innerHTML = content
     .replace(/```(css|html|js|javascript)\n?([^`]+)```/gi, function(_,lang,code){
       return `<pre><code class="lang-${lang}">${escapeHtml(code.trim())}</code></pre>`;
@@ -158,11 +156,11 @@ form.onsubmit = async (e) => {
   addMessage("…", "llm");
 
   try {
-    const res = await fetch("/api/llm7", {
+    const res = await fetch("/api/chat", {
       method: "POST",
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        model: "llama-3-8b-instruct",
+        model: "gpt-3.5-turbo", // you can change to gpt-4o if you want
         messages: history,
         stream: false
       })
@@ -174,7 +172,6 @@ form.onsubmit = async (e) => {
       addMessage(reply, "llm");
       history.push({role: "assistant", content: reply});
       extractAndApplyCssFromReply(reply);
-      // Extend: extract JS/HTML and handle as needed
     } else {
       addMessage("[No response from LLM]", "llm");
     }
@@ -184,7 +181,6 @@ form.onsubmit = async (e) => {
   }
 };
 
-// Example: On load, greet the user and say you can change UI
 window.onload = () => {
   addMessage("👋 Hi! I'm Gen-UI. Describe how you want the chat UI to look (e.g. 'make everything dark mode', 'increase font size', 'round the bubbles'), or just chat with me.", "llm");
 };
