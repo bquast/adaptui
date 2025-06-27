@@ -2,101 +2,141 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Gen-UI: Self-Modifying Chat (OpenAI)</title>
+  <title>AdaptUI – Self-Designing Chat</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style id="base-style">
     :root {
-      --bg: #fafbfc;
-      --fg: #202124;
-      --accent: #0077ff;
-      --bubble-radius: 1em;
+      --bg: #111114;
+      --panel-bg: #23242a;
+      --bubble-bg: #fff;
+      --bubble-fg: #222;
+      --bubble-radius: 1.3em;
       --font: system-ui, sans-serif;
+      --panel-radius: 1.5em;
     }
     body {
       margin: 0;
+      min-height: 100dvh;
       background: var(--bg);
-      color: var(--fg);
+      color: var(--bubble-fg);
       font-family: var(--font);
       display: flex;
       flex-direction: column;
-      height: 100vh;
+    }
+    #main {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100dvh;
     }
     #chat {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1em;
+      margin: 4vh 0 2vh 0;
+      background: var(--panel-bg);
+      border-radius: var(--panel-radius);
+      box-shadow: 0 6px 36px #0007, 0 1px 4px #0003;
+      padding: 2.2em 1.5em 1.8em 1.5em;
+      width: 100%;
+      max-width: 660px;
       display: flex;
       flex-direction: column;
-      gap: 1em;
-      max-width: 600px;
-      margin: 0 auto;
-      width: 100%;
+      gap: 1.3em;
+      min-height: 480px;
     }
     .bubble {
-      background: #fff;
-      padding: 0.9em 1.2em;
+      background: var(--bubble-bg);
+      color: var(--bubble-fg);
+      padding: 1.1em 1.5em;
       border-radius: var(--bubble-radius);
-      max-width: 75%;
+      max-width: 74%;
       box-shadow: 0 2px 8px #0001;
       word-break: break-word;
       width: fit-content;
+      font-size: 1.13em;
+      transition: background .3s, color .3s;
     }
     .bubble.mine {
       align-self: flex-end;
-      background: #e9f1fe;
+      background: #2e6be8;
+      color: #fff;
     }
     .bubble.llm {
       align-self: flex-start;
     }
+    .avatar {
+      display: inline-block;
+      width: 1.9em; height: 1.9em;
+      margin-right: 0.5em;
+      vertical-align: middle;
+      border-radius: 50%;
+      background: linear-gradient(120deg, #8a2be2 0%, #2e6be8 100%);
+      color: #fff; text-align: center;
+      font-weight: 700; font-size: 1em;
+      line-height: 1.9em;
+      box-shadow: 0 0 0 2px #fff3;
+      font-family: inherit;
+    }
     .input-row {
       display: flex;
-      gap: 0.7em;
-      padding: 1em;
-      background: #fff8;
-      box-shadow: 0 -1px 6px #0001;
-      max-width: 600px;
-      margin: 0 auto;
+      gap: 0.8em;
+      background: var(--panel-bg);
+      box-shadow: 0 -1px 12px #0002;
+      max-width: 660px;
+      margin: 0 auto 3vh auto;
       width: 100%;
+      border-radius: var(--panel-radius);
+      padding: 1.1em 1em 1.1em 1em;
     }
     input[type=text] {
       flex: 1;
-      padding: 0.9em;
-      border-radius: 0.7em;
-      border: 1px solid #ccc;
-      font-size: 1em;
+      padding: 1em;
+      border-radius: 1em;
+      border: 1px solid #444a;
+      font-size: 1.1em;
       font-family: inherit;
       outline: none;
+      background: #18191e;
+      color: #fff;
+    }
+    input[type=text]::placeholder {
+      color: #a5a5af;
+      opacity: 1;
     }
     button {
-      background: var(--accent);
+      background: #2e6be8;
       color: #fff;
       border: none;
-      border-radius: 0.7em;
-      padding: 0 1.4em;
-      font-size: 1em;
+      border-radius: 1em;
+      padding: 0 1.6em;
+      font-size: 1.08em;
+      font-weight: 500;
       cursor: pointer;
-      transition: background 0.1s;
+      transition: background 0.15s;
+      letter-spacing: .01em;
     }
-    button:active {
-      background: #005fcc;
+    button:active, button:focus {
+      background: #1a47b6;
     }
     pre, code {
       font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
-      background: #f8f8f8;
-      border-radius: 0.4em;
-      padding: 0.3em 0.7em;
-      font-size: 0.96em;
+      background: #23242a;
+      color: #d0cfcf;
+      border-radius: 0.7em;
+      padding: 0.7em 1em;
+      font-size: 1em;
       overflow-x: auto;
       display: block;
-      margin: 0.6em 0 0 0;
+      margin: 0.8em 0 0 0;
     }
   </style>
   <style id="llm-css"></style>
 </head>
 <body>
-  <div id="chat"></div>
+  <div id="main">
+    <div id="chat"></div>
+  </div>
   <form class="input-row" id="form" autocomplete="off">
-    <input type="text" id="input" autocomplete="off" placeholder="Describe how to change the UI, or chat..." required>
+    <input type="text" id="input" autocomplete="off" placeholder="Describe how to change AdaptUI, or just chat..." required>
     <button type="submit">Send</button>
   </form>
 <script>
@@ -109,13 +149,20 @@ let history = [
   {
     role: "system",
     content: `
-You are Gen-UI, an LLM assistant that helps users interact via chat.
-You are able to respond with code that modifies the chat interface if the user asks.
-If the user describes a change to the UI, write valid CSS in a markdown code block (use \`\`\`css ... \`\`\`).
-You may also include a brief summary or explanation outside code blocks.
-Never write placeholder code; always write working CSS matching the user's request.
-Do not apologize; just do it.
-If the user asks for JS or HTML, provide it in appropriate code blocks (js/html), but CSS changes are preferred for UI.
+You are AdaptUI, an LLM-powered self-designing chat interface that responds to user requests for style, layout, and interface changes.
+When a user requests a UI change, always return valid, fully working CSS inside a markdown code block like this:
+\`\`\`css
+/* CSS */
+body { ... }
+#chat { ... }
+.bubble { ... }
+\`\`\`
+- Never write placeholder code.
+- When changing backgrounds, always set both the page background (body) and the chat panel (#chat) to visually different colors for layering.
+- For dark mode, use a dark background for body, a lighter dark for #chat, and good contrast for bubbles and input.
+- You may include a brief human summary above the code.
+- Only include JavaScript or HTML if the user asks for it; otherwise, prefer CSS.
+- Never apologize; just do it.
 `
   }
 ];
@@ -123,13 +170,23 @@ If the user asks for JS or HTML, provide it in appropriate code blocks (js/html)
 function addMessage(content, who) {
   const div = document.createElement('div');
   div.className = 'bubble ' + (who === 'me' ? 'mine' : 'llm');
-  div.innerHTML = content
-    .replace(/```(css|html|js|javascript)\n?([^`]+)```/gi, function(_,lang,code){
-      return `<pre><code class="lang-${lang}">${escapeHtml(code.trim())}</code></pre>`;
-    })
-    .replace(/\n/g, '<br>');
+  if (who === 'llm') {
+    // Add avatar only for AdaptUI's messages
+    div.innerHTML = `<span class="avatar">A</span>` + markdownToHtml(content);
+  } else {
+    div.innerHTML = markdownToHtml(content);
+  }
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
+}
+
+function markdownToHtml(text) {
+  // Basic code block handling, plus simple newlines
+  return text
+    .replace(/```(css|html|js|javascript)?\s*([\s\S]*?)```/gi, function(_,lang,code){
+      return `<pre><code class="lang-${lang||''}">${escapeHtml(code.trim())}</code></pre>`;
+    })
+    .replace(/\n/g, '<br>');
 }
 
 function escapeHtml(text) {
@@ -138,14 +195,13 @@ function escapeHtml(text) {
   }[ch]));
 }
 
+// Extract and apply CSS from LLM reply (code block or bare CSS)
 function extractAndApplyCssFromReply(reply) {
-  // Try to extract CSS in code block
   let match = reply.match(/```css\s*([\s\S]+?)```/i);
   if (match) {
     llmCss.innerHTML = match[1].trim();
     return;
   }
-  // Fallback: if reply looks like pure CSS (e.g., starts with body or . or :)
   if (/^\s*(body|\.|#|@|:)/m.test(reply) && reply.length < 3000) {
     llmCss.innerHTML = reply.trim();
   }
@@ -178,7 +234,7 @@ form.onsubmit = async (e) => {
       history.push({role: "assistant", content: reply});
       extractAndApplyCssFromReply(reply);
     } else {
-      addMessage("[No response from LLM]", "llm");
+      addMessage("[No response from AdaptUI]", "llm");
     }
   } catch (err) {
     chat.lastChild.remove();
@@ -187,7 +243,7 @@ form.onsubmit = async (e) => {
 };
 
 window.onload = () => {
-  addMessage("👋 Hi! I'm Gen-UI. Describe how you want the chat UI to look (e.g. 'make everything dark mode', 'increase font size', 'round the bubbles'), or just chat with me.", "llm");
+  addMessage(`<span class="avatar">A</span>Hi! I'm <b>AdaptUI</b>. Describe how you want the chat to look (e.g. "dark mode layered", "Mario style", "bigger input", "show my messages on the left"), or just chat with me.`, "llm");
 };
 </script>
 </body>
