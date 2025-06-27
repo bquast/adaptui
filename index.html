@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gen-UI LLM Chat (Self-Modifying UI)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style id="base-style">
+    :root {
+      --bg: #fafbfc;
+      --fg: #202124;
+      --accent: #0077ff;
+      --bubble-radius: 1em;
+      --font: system-ui, sans-serif;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1em;
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+      max-width: 600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .bubble {
+      background: #fff;
+      padding: 0.9em 1.2em;
+      border-radius: var(--bubble-radius);
+      max-width: 75%;
+      box-shadow: 0 2px 8px #0001;
+      word-break: break-word;
+      width: fit-content;
+    }
+    .bubble.mine {
+      align-self: flex-end;
+      background: #e9f1fe;
+    }
+    .bubble.llm {
+      align-self: flex-start;
+    }
+    .input-row {
+      display: flex;
+      gap: 0.7em;
+      padding: 1em;
+      background: #fff8;
+      box-shadow: 0 -1px 6px #0001;
+      max-width: 600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    input[type=text] {
+      flex: 1;
+      padding: 0.9em;
+      border-radius: 0.7em;
+      border: 1px solid #ccc;
+      font-size: 1em;
+      font-family: inherit;
+      outline: none;
+    }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 0.7em;
+      padding: 0 1.4em;
+      font-size: 1em;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    button:active {
+      background: #005fcc;
+    }
+    pre, code {
+      font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+      background: #f8f8f8;
+      border-radius: 0.4em;
+      padding: 0.3em 0.7em;
+      font-size: 0.96em;
+      overflow-x: auto;
+      display: block;
+      margin: 0.6em 0 0 0;
+    }
+  </style>
+  <!-- Additional dynamic LLM CSS will go here -->
+  <style id="llm-css"></style>
+</head>
+<body>
+  <div id="chat"></div>
+  <form class="input-row" id="form" autocomplete="off">
+    <input type="text" id="input" autocomplete="off" placeholder="Describe how to change the UI, or chat..." required>
+    <button type="submit">Send</button>
+  </form>
+<script>
+const chat = document.getElementById('chat');
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const llmCss = document.getElementById('llm-css');
+
+let history = [
+  {
+    role: "system",
+    content: `
+You are Gen-UI, an LLM assistant that helps users interact via chat.
+You are able to respond with code that modifies the chat interface if the user asks.
+If the user describes a change to the UI, write valid CSS in a markdown code block (use \`\`\`css ... \`\`\`).
+You may also include a brief summary or explanation outside code blocks.
+Never write placeholder code; always write working CSS matching the user's request.
+Do not apologize; just do it.
+If the user asks for JS or HTML, provide it in appropriate code blocks (js/html), but CSS changes are preferred for UI.
+`
+  }
+];
+
+function addMessage(content, who) {
+  const div = document.createElement('div');
+  div.className = 'bubble ' + (who === 'me' ? 'mine' : 'llm');
+  // Basic markdown code block rendering (CSS/JS/HTML)
+  div.innerHTML = content
+    .replace(/```(css|html|js|javascript)\n?([^`]+)```/gi, function(_,lang,code){
+      return `<pre><code class="lang-${lang}">${escapeHtml(code.trim())}</code></pre>`;
+    })
+    .replace(/\n/g, '<br>');
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"]/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+  }[ch]));
+}
+
+function extractAndApplyCssFromReply(reply) {
+  // Extracts ```css ... ``` code blocks and applies them
+  const matches = reply.match(/```css\n?([^`]+)```/i);
+  if (matches) {
+    llmCss.innerHTML = matches[1].trim();
+  }
+}
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  addMessage(text, 'me');
+  input.value = '';
+  history.push({role: "user", content: text});
+  addMessage("…", "llm");
+
+  try {
+    const res = await fetch("https://llm7.io/v1/chat/completions", {
+      method: "POST",
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        model: "llama-3-8b-instruct",
+        messages: history,
+        stream: false
+      })
+    });
+    const json = await res.json();
+    chat.lastChild.remove(); // remove "..."
+    if (json.choices && json.choices[0]) {
+      const reply = json.choices[0].message.content;
+      addMessage(reply, "llm");
+      history.push({role: "assistant", content: reply});
+      extractAndApplyCssFromReply(reply);
+      // Extend: extract JS/HTML and handle as needed
+    } else {
+      addMessage("[No response from LLM]", "llm");
+    }
+  } catch (err) {
+    chat.lastChild.remove();
+    addMessage("Error: "+err, "llm");
+  }
+};
+
+// Example: On load, greet the user and say you can change UI
+window.onload = () => {
+  addMessage("👋 Hi! I'm Gen-UI. Describe how you want the chat UI to look (e.g. 'make everything dark mode', 'increase font size', 'round the bubbles'), or just chat with me.", "llm");
+};
+</script>
+</body>
+</html>
