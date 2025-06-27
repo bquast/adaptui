@@ -6,13 +6,20 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style id="base-style">
     :root {
-      --bg: #111114;
-      --panel-bg: #23242a;
+      --bg: #f4f6fa;
+      --panel-bg: #fff;
       --bubble-bg: #fff;
-      --bubble-fg: #222;
+      --bubble-fg: #23242a;
       --bubble-radius: 1.3em;
       --font: system-ui, sans-serif;
       --panel-radius: 1.5em;
+      --input-bg: #f6f7fa;
+      --input-fg: #23242a;
+      --button-bg: #2563eb;
+      --button-fg: #fff;
+      --mine-bg: #2563eb;
+      --mine-fg: #fff;
+      --shadow: 0 6px 36px #0002, 0 1px 4px #0001;
     }
     body {
       margin: 0;
@@ -29,19 +36,43 @@
       justify-content: center;
       align-items: flex-start;
       min-height: 100dvh;
+      padding-bottom: 90px; /* leaves space for input */
     }
     #chat {
-      margin: 4vh 0 2vh 0;
+      margin: 5vh 0 2vh 0;
       background: var(--panel-bg);
       border-radius: var(--panel-radius);
-      box-shadow: 0 6px 36px #0007, 0 1px 4px #0003;
+      box-shadow: var(--shadow);
       padding: 2.2em 1.5em 1.8em 1.5em;
       width: 100%;
       max-width: 660px;
       display: flex;
       flex-direction: column;
       gap: 1.3em;
-      min-height: 480px;
+      min-height: 400px;
+    }
+    .suggest-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8em;
+      margin-bottom: 1em;
+    }
+    .suggest {
+      background: #f0f2f7;
+      color: #23242a;
+      border-radius: 1.2em;
+      border: 1px solid #eee;
+      padding: 0.6em 1.3em;
+      font-size: 1.06em;
+      cursor: pointer;
+      box-shadow: 0 1px 6px #0001;
+      transition: background 0.13s, color 0.13s;
+      user-select: none;
+    }
+    .suggest:active, .suggest:focus {
+      background: #e4e7ef;
+      color: #1849b1;
+      outline: none;
     }
     .bubble {
       background: var(--bubble-bg);
@@ -57,8 +88,8 @@
     }
     .bubble.mine {
       align-self: flex-end;
-      background: #2e6be8;
-      color: #fff;
+      background: var(--mine-bg);
+      color: var(--mine-fg);
     }
     .bubble.llm {
       align-self: flex-start;
@@ -77,34 +108,41 @@
       font-family: inherit;
     }
     .input-row {
+      position: fixed;
+      bottom: 0;
+      left: 0; right: 0;
+      z-index: 10;
       display: flex;
       gap: 0.8em;
       background: var(--panel-bg);
       box-shadow: 0 -1px 12px #0002;
       max-width: 660px;
-      margin: 0 auto 3vh auto;
+      margin: 0 auto 0 auto;
       width: 100%;
-      border-radius: var(--panel-radius);
+      border-radius: var(--panel-radius) var(--panel-radius) 0 0;
       padding: 1.1em 1em 1.1em 1em;
+      justify-content: center;
+      align-items: center;
+      transition: background .3s;
     }
     input[type=text] {
       flex: 1;
       padding: 1em;
       border-radius: 1em;
-      border: 1px solid #444a;
+      border: 1px solid #4441;
       font-size: 1.1em;
       font-family: inherit;
       outline: none;
-      background: #18191e;
-      color: #fff;
+      background: var(--input-bg);
+      color: var(--input-fg);
     }
     input[type=text]::placeholder {
       color: #a5a5af;
       opacity: 1;
     }
     button {
-      background: #2e6be8;
-      color: #fff;
+      background: var(--button-bg);
+      color: var(--button-fg);
       border: none;
       border-radius: 1em;
       padding: 0 1.6em;
@@ -119,7 +157,7 @@
     }
     pre, code {
       font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
-      background: #23242a;
+      background: #f6f6fb;
       color: #d0cfcf;
       border-radius: 0.7em;
       padding: 0.7em 1em;
@@ -127,6 +165,10 @@
       overflow-x: auto;
       display: block;
       margin: 0.8em 0 0 0;
+    }
+    @media (max-width: 768px) {
+      #chat, .input-row { max-width: 100vw; }
+      #main { padding-bottom: 110px;}
     }
   </style>
   <style id="llm-css"></style>
@@ -145,33 +187,53 @@ const form = document.getElementById('form');
 const input = document.getElementById('input');
 const llmCss = document.getElementById('llm-css');
 
+const suggestions = [
+  {text: 'Make it look like a Mario theme 🍄'},
+  {text: 'Change to dark mode 🌙'},
+  {text: 'Make it calm and peaceful 🌿'},
+  {text: 'Make it look like Windows 98 🖥️'}
+];
+
+let suggestRow = null;
+
 let history = [
   {
     role: "system",
     content: `
-You are AdaptUI, an LLM-powered self-designing chat interface that responds to user requests for style, layout, and interface changes.
-When a user requests a UI change, always return valid, fully working CSS inside a markdown code block like this:
-\`\`\`css
-/* CSS */
-body { ... }
-#chat { ... }
-.bubble { ... }
-\`\`\`
-- Never write placeholder code.
-- When changing backgrounds, always set both the page background (body) and the chat panel (#chat) to visually different colors for layering.
-- For dark mode, use a dark background for body, a lighter dark for #chat, and good contrast for bubbles and input.
-- You may include a brief human summary above the code.
-- Only include JavaScript or HTML if the user asks for it; otherwise, prefer CSS.
-- Never apologize; just do it.
+You are AdaptUI, an LLM-powered self-designing chat interface.
+Whenever the user requests a UI change, always output complete CSS in a markdown code block.
+- Always theme every aspect: background (body), chat panel (#chat), user and bot bubbles, input row, input box, send button, etc.
+- Update colors, gradients, radii, borders, font if relevant.
+- If the user says "dark mode" use a dark background for body, a lighter dark for #chat, and high-contrast bubbles and input.
+- For "Mario" or other themes, apply strong, playful colors for all UI elements (see replit example).
+- Use working CSS, not placeholders.
+- You may add a brief summary above the code block.
 `
   }
 ];
+
+function addSuggestions() {
+  if (suggestRow) return;
+  suggestRow = document.createElement('div');
+  suggestRow.className = 'suggest-row';
+  suggestions.forEach(s => {
+    let b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'suggest';
+    b.textContent = s.text;
+    b.onclick = () => {
+      input.value = s.text;
+      input.focus();
+    };
+    suggestRow.appendChild(b);
+  });
+  chat.appendChild(suggestRow);
+}
 
 function addMessage(content, who) {
   const div = document.createElement('div');
   div.className = 'bubble ' + (who === 'me' ? 'mine' : 'llm');
   if (who === 'llm') {
-    // Add avatar only for AdaptUI's messages
     div.innerHTML = `<span class="avatar">A</span>` + markdownToHtml(content);
   } else {
     div.innerHTML = markdownToHtml(content);
@@ -181,7 +243,6 @@ function addMessage(content, who) {
 }
 
 function markdownToHtml(text) {
-  // Basic code block handling, plus simple newlines
   return text
     .replace(/```(css|html|js|javascript)?\s*([\s\S]*?)```/gi, function(_,lang,code){
       return `<pre><code class="lang-${lang||''}">${escapeHtml(code.trim())}</code></pre>`;
@@ -195,7 +256,6 @@ function escapeHtml(text) {
   }[ch]));
 }
 
-// Extract and apply CSS from LLM reply (code block or bare CSS)
 function extractAndApplyCssFromReply(reply) {
   let match = reply.match(/```css\s*([\s\S]+?)```/i);
   if (match) {
@@ -209,6 +269,7 @@ function extractAndApplyCssFromReply(reply) {
 
 form.onsubmit = async (e) => {
   e.preventDefault();
+  if (suggestRow) { suggestRow.remove(); suggestRow = null; }
   const text = input.value.trim();
   if (!text) return;
   addMessage(text, 'me');
@@ -243,7 +304,8 @@ form.onsubmit = async (e) => {
 };
 
 window.onload = () => {
-  addMessage(`<span class="avatar">A</span>Hi! I'm <b>AdaptUI</b>. Describe how you want the chat to look (e.g. "dark mode layered", "Mario style", "bigger input", "show my messages on the left"), or just chat with me.`, "llm");
+  addMessage(`<span class="avatar">A</span>Hi! I'm <b>AdaptUI</b>. Describe how you want the chat to look (e.g. "dark mode", "Mario style", "show my messages on the left"), or just chat with me.`, "llm");
+  addSuggestions();
 };
 </script>
 </body>
