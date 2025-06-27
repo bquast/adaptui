@@ -139,10 +139,15 @@ function escapeHtml(text) {
 }
 
 function extractAndApplyCssFromReply(reply) {
-  // Extracts ```css ... ``` code blocks and applies them
-  const matches = reply.match(/```css\n?([^`]+)```/i);
-  if (matches) {
-    llmCss.innerHTML = matches[1].trim();
+  // Try to extract CSS in code block
+  let match = reply.match(/```css\s*([\s\S]+?)```/i);
+  if (match) {
+    llmCss.innerHTML = match[1].trim();
+    return;
+  }
+  // Fallback: if reply looks like pure CSS (e.g., starts with body or . or :)
+  if (/^\s*(body|\.|#|@|:)/m.test(reply) && reply.length < 3000) {
+    llmCss.innerHTML = reply.trim();
   }
 }
 
